@@ -4,11 +4,15 @@ import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.Relational;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.Location;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 public class DirectionExpansion extends PlaceholderExpansion implements Relational {
+
+    private static final Pattern LEGACY_CODE_PATTERN = Pattern.compile("(?i)[&§]([0-9A-FK-OR])");
 
     private final TrChatAddon plugin;
 
@@ -31,10 +35,9 @@ public class DirectionExpansion extends PlaceholderExpansion implements Relation
         return "trchataddon";
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public String getVersion() {
-        return plugin.getDescription().getVersion();
+        return plugin.getPluginMeta().getVersion();
     }
 
     @Override
@@ -162,12 +165,11 @@ public class DirectionExpansion extends PlaceholderExpansion implements Relation
             if (prefix == null || prefix.trim().isEmpty()) {
                 return metaColor == null ? "" : metaColor;
             }
-            String translated = ChatColor.translateAlternateColorCodes('&', prefix);
-            String lastColors = ChatColor.getLastColors(translated);
+            String lastColors = extractLastLegacyColors(prefix);
             if (lastColors == null || lastColors.isEmpty()) {
                 return metaColor == null ? "" : metaColor;
             }
-            return lastColors.replace('§', '&');
+            return lastColors;
         }
 
         if (params.equals("chat_color")) {
@@ -181,15 +183,23 @@ public class DirectionExpansion extends PlaceholderExpansion implements Relation
                 return "&7";
             }
 
-            String translated = ChatColor.translateAlternateColorCodes('&', prefix);
-            String lastColors = ChatColor.getLastColors(translated);
+            String lastColors = extractLastLegacyColors(prefix);
             if (lastColors == null || lastColors.isEmpty()) {
                 return "&7";
             }
-            return lastColors.replace('§', '&');
+            return lastColors;
         }
 
         return null; //
+    }
+
+    private String extractLastLegacyColors(String prefix) {
+        Matcher matcher = LEGACY_CODE_PATTERN.matcher(prefix);
+        StringBuilder lastColors = new StringBuilder();
+        while (matcher.find()) {
+            lastColors.append(matcher.group());
+        }
+        return lastColors.toString();
     }
 
     private String getArrowFromAngle(double angle) {

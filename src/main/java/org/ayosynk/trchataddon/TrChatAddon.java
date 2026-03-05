@@ -1,5 +1,6 @@
 package org.ayosynk.trchataddon;
 
+import io.papermc.paper.event.player.AsyncChatEvent;
 import me.arasple.mc.trchat.api.event.TrChatReceiveEvent;
 import me.arasple.mc.trchat.module.display.ChatSession;
 import me.arasple.mc.trchat.module.display.channel.Channel;
@@ -9,21 +10,28 @@ import me.arasple.mc.trchat.taboolib.module.chat.Components;
 
 import me.clip.placeholderapi.PlaceholderAPI;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import org.ayosynk.trchataddon.listeners.AuraSkillsListener;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.UUID;
 
 public class TrChatAddon extends JavaPlugin implements Listener {
+
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacyAmpersand();
+    private static final PlainTextComponentSerializer PLAIN_TEXT_SERIALIZER = PlainTextComponentSerializer.plainText();
+    private static final Pattern LEGACY_CODE_PATTERN = Pattern.compile("(?i)[&§]([0-9A-FK-OR])");
 
     private String noOneHeardMessage;
     private String directionFormat;
@@ -61,21 +69,19 @@ public class TrChatAddon extends JavaPlugin implements Listener {
     }
 
     // === "No one heard you" feature ===
-    @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onChat(AsyncPlayerChatEvent event) {
-        if (event.getRecipients().size() <= 1) {
-            event.getPlayer().sendMessage(ChatColor.translateAlternateColorCodes('&', noOneHeardMessage));
+    public void onChat(AsyncChatEvent event) {
+        if (event.viewers().size() <= 1) {
+            event.getPlayer().sendMessage(LEGACY_SERIALIZER.deserialize(noOneHeardMessage));
         }
     }
 
     // === Chat Color Injection via LuckPerms meta ===
     // Runs at HIGH priority before TrChat processes the message
-    @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.HIGH)
-    public void onChatColor(AsyncPlayerChatEvent event) {
+    public void onChatColor(AsyncChatEvent event) {
         Player sender = event.getPlayer();
-        
+
         // Get chat color from LuckPerms meta
         String chatColor = PlaceholderAPI.setPlaceholders(sender, "%luckperms_meta_chat_color%");
         if (chatColor == null || chatColor.trim().isEmpty() || chatColor.equals("%luckperms_meta_chat_color%")) {
@@ -84,33 +90,59 @@ public class TrChatAddon extends JavaPlugin implements Listener {
             if (prefix == null || prefix.trim().isEmpty()) {
                 chatColor = "&7";
             } else {
-                String translated = ChatColor.translateAlternateColorCodes('&', prefix);
-                String lastColors = ChatColor.getLastColors(translated);
+                String lastColors = extractLastLegacyColors(prefix);
                 if (lastColors == null || lastColors.isEmpty()) {
                     chatColor = "&7";
                 } else {
-                    chatColor = lastColors.replace('§', '&');
+                    chatColor = lastColors;
                 }
             }
         }
-        
+
         // Inject color after any TrChat channel prefix (!, @, etc) to not break channel detection
-        String originalMessage = event.getMessage();
-        String coloredPrefix = ChatColor.translateAlternateColorCodes('&', chatColor);
-        
+        String originalMessage = PLAIN_TEXT_SERIALIZER.serialize(event.message());
+        String coloredPrefix = chatColor;
+        String coloredMessage;
+
         // Check for channel prefixes and inject color after them
         if (originalMessage.startsWith("!")) {
-            event.setMessage("!" + coloredPrefix + originalMessage.substring(1));
+            coloredMessage = "!" + coloredPrefix + originalMessage.substring(1);
         } else if (originalMessage.startsWith("@")) {
-            event.setMessage("@" + coloredPrefix + originalMessage.substring(1));
+            coloredMessage = "@" + coloredPrefix + originalMessage.substring(1);
         } else {
             // No channel prefix - prepend color normally
-            event.setMessage(coloredPrefix + originalMessage);
+            coloredMessage = coloredPrefix + originalMessage;
         }
+        event.message(LEGACY_SERIALIZER.deserialize(coloredMessage));
+    }
+
+    private String extractLastLegacyColors(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.replace('§', '&');
+        Matcher matcher = LEGACY_CODE_PATTERN.matcher(normalized);
+        String lastColor = "";
+        StringBuilder formats = new StringBuilder();
+        while (matcher.find()) {
+            char code = Character.toLowerCase(matcher.group(1).charAt(0));
+            if ((code >= '0' && code <= '9') || (code >= 'a' && code <= 'f')) {
+                lastColor = "&" + code;
+                formats.setLength(0);
+            } else if (code == 'r') {
+                lastColor = "";
+                formats.setLength(0);
+            } else if ("klmno".indexOf(code) >= 0) {
+                String formatToken = "&" + code;
+                if (formats.indexOf(formatToken) < 0) {
+                    formats.append(formatToken);
+                }
+            }
+        }
+        return lastColor + formats;
     }
 
     // === Per-receiver Direction Arrow via TrChatReceiveEvent ===
-    @SuppressWarnings("deprecation")
     @EventHandler
     public void onTrChatReceive(TrChatReceiveEvent event) {
         CommandSender receiverSender = event.getReceiver();
@@ -177,7 +209,7 @@ public class TrChatAddon extends JavaPlugin implements Listener {
         }
 
         // Build the prefix using TrChat's ComponentText system and prepend to message
-        String coloredPrefix = ChatColor.translateAlternateColorCodes('&', prefix);
+        String coloredPrefix = prefix;
         ComponentText prefixComponent = Components.INSTANCE.text(coloredPrefix);
         ComponentText original = event.getMessage();
         event.setMessage(prefixComponent.append(original));

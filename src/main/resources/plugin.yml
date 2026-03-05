@@ -1,0 +1,8 @@
+name: TrChatAddon
+version: '${version}'
+main: org.ayosynk.trchataddon.TrChatAddon
+api-version: '1.20'
+description: A small addon for TrChat to inform players when nobody heard them.
+authors: [ayosynk]
+depend: [TrChat]
+softdepend: [PlaceholderAPI, AuraSkills]

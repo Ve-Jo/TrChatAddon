@@ -1,0 +1,9 @@
+.gradle/
+build/
+bin/
+.idea/
+.vscode/
+*.iml
+decomp/
+Inspect.java
+inspect.py

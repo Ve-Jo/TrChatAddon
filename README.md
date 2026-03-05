@@ -12,6 +12,12 @@
 - Listens for proxy plugin messages on `trchataddon:main`
 - Optional AuraSkills integration for skill level-up broadcast handling
 
+## Screenshot
+
+### Distance indicator in chat
+
+![Distance indicator in chat](docs/screenshots/distance-indicator-chat.jpg)
+
 ## Requirements
 
 - Bukkit/Paper/Purpur-compatible server
